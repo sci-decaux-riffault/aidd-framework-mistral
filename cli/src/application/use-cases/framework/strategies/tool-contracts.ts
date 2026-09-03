@@ -29,6 +29,10 @@ import {
   OUTPUT_CURSOR_MARKETPLACE_RELATIVE,
 } from "../../../../domain/formats/cursor-paths.js";
 import {
+  OUTPUT_MISTRAL_MANIFEST_RELATIVE,
+  OUTPUT_MISTRAL_MARKETPLACE_RELATIVE,
+} from "../../../../domain/formats/mistral-paths.js";
+import {
   flattenCopilotHooksShape,
   mergeClaudeSettingsHooks,
   mergeCodexFrameworkHooksJson,
@@ -818,3 +822,97 @@ export function buildOpencodeFlatContract(): ToolBuildContract {
     },
   };
 }
+
+// Mistral contracts
+
+export function buildMistralContract(): ToolBuildContract {
+  const manifestRelative = OUTPUT_MISTRAL_MANIFEST_RELATIVE;
+  const marketplaceRelative = OUTPUT_MISTRAL_MARKETPLACE_RELATIVE;
+  const mistralToken = "$" + "{MISTRAL_PLUGIN_ROOT}";
+  return {
+    manifestDir: ".mistral-plugin",
+    marketplaceRelative,
+    pluginRootToken: mistralToken,
+    manifestFileRelative: manifestRelative,
+    synthesizeManifest: (source, presence) =>
+      synthesizeClaudeStyleManifest(source, presence, {
+        manifestDir: ".mistral-plugin",
+        agentsField: true,
+      }),
+    manifestSchemaName: "plugin-manifest",
+    artifacts: {
+      skills: {
+        supported: true,
+        source: { kind: "fullTree", srcDir: "skills" },
+        path: (_p, rel) => rel,
+      },
+      agents: {
+        supported: true,
+        source: { kind: "filteredTree", srcDir: "agents", inputExt: ".md" },
+        path: (_p, rel) => rel,
+        transform: transformClaudeAgent,
+      },
+      mcp: {
+        supported: true,
+        source: { kind: "configFile", srcPath: ".mcp.json" },
+        path: () => ".mcp.json",
+      },
+      hooks: {
+        supported: true,
+        source: { kind: "hooksBundle", jsonPath: "hooks/hooks.json", scriptDir: "hooks" },
+        path: (_p, rel) => rel,
+      },
+      rules: { supported: false },
+      commands: { supported: false },
+    },
+    buildMarketplaceCatalog: async (source, entries, _fs) => ({
+      catalog: buildClaudeStyleMarketplace(
+        source as Parameters<typeof buildClaudeStyleMarketplace>[0],
+        entries
+      ),
+      schemaName: "claude-marketplace",
+      destRelPath: marketplaceRelative,
+    }),
+    buildMarketplaceEntry: async (name, _src, outDir, srcEntry, fs) =>
+      buildClaudeStyleEntry(name, outDir, srcEntry, manifestRelative, fs),
+  };
+}
+
+export function buildMistralFlatContract(): ToolBuildContract {
+  return {
+    manifestDir: null,
+    marketplaceRelative: null,
+    manifestFileRelative: null,
+    synthesizeManifest: null,
+    manifestSchemaName: null,
+    artifacts: {
+      skills: {
+        supported: true,
+        source: { kind: "fullTree", srcDir: "skills" },
+        path: (plugin, rel) => {
+          const baseName = rel.replace(/^skills\//, "");
+          const withoutSuffix = baseName.replace(/\.\w+\.md$/, "").replace(/\.md$/, "");
+          return `.vibe/skills/${plugin}-${withoutSuffix.toLowerCase()}/skill.md`;
+        },
+        rewriteSkillName: false, // Keep original frontmatter name
+      },
+      agents: {
+        supported: true,
+        source: { kind: "filteredTree", srcDir: "agents", inputExt: ".md" },
+        path: (plugin, rel) => genericFlatAgentPath(".vibe/agents/", plugin, rel.replace(/^agents\//, ""), ".md"),
+        transform: transformClaudeAgent,
+      },
+      mcp: {
+        supported: true,
+        source: { kind: "configFile", srcPath: ".mcp.json" },
+        path: () => ".vibe/mcp.json",
+      },
+      hooks: { supported: false },
+      rules: { supported: false },
+      commands: { supported: false },
+    },
+    buildMarketplaceCatalog: null,
+    buildMarketplaceEntry: null,
+  };
+}
+
